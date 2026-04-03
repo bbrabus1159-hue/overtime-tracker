@@ -280,7 +280,7 @@
   .input-row {
     display: flex;
     gap: 12px;
-    margin-bottom: 20px;
+    margin-bottom: 8px;
     align-items: flex-end;
   }
 
@@ -528,29 +528,25 @@
 
     <div class="input-row">
       <div class="input-group">
-        <div class="input-label">時間</div>
-        <input type="number" class="time-input" id="inputHours" min="0" max="23" placeholder="0">
-      </div>
-      <div class="input-unit">:</div>
-      <div class="input-group">
-        <div class="input-label">分</div>
-        <input type="number" class="time-input" id="inputMins" min="0" max="59" placeholder="00">
+        <div class="input-label">残業時間（例: 1.5 = 1時間30分）</div>
+        <input type="number" class="time-input" id="inputDecimal" min="0" max="23.75" step="0.25" placeholder="0.25">
       </div>
     </div>
+    <div id="convertedTime" style="text-align:center;color:var(--accent2);font-family:'DM Mono',monospace;font-size:14px;margin-top:-12px;margin-bottom:16px;"></div>
 
     <div class="presets">
-      <button class="preset-btn" onclick="setPreset(0,15)">0:15</button>
-      <button class="preset-btn" onclick="setPreset(0,30)">0:30</button>
-      <button class="preset-btn" onclick="setPreset(0,45)">0:45</button>
-      <button class="preset-btn" onclick="setPreset(1,0)">1:00</button>
-      <button class="preset-btn" onclick="setPreset(1,15)">1:15</button>
-      <button class="preset-btn" onclick="setPreset(1,30)">1:30</button>
-      <button class="preset-btn" onclick="setPreset(1,45)">1:45</button>
-      <button class="preset-btn" onclick="setPreset(2,0)">2:00</button>
-      <button class="preset-btn" onclick="setPreset(2,15)">2:15</button>
-      <button class="preset-btn" onclick="setPreset(2,30)">2:30</button>
-      <button class="preset-btn" onclick="setPreset(2,45)">2:45</button>
-      <button class="preset-btn" onclick="setPreset(3,0)">3:00</button>
+      <button class="preset-btn" onclick="setPreset(0.25)">0.25</button>
+      <button class="preset-btn" onclick="setPreset(0.5)">0.5</button>
+      <button class="preset-btn" onclick="setPreset(0.75)">0.75</button>
+      <button class="preset-btn" onclick="setPreset(1.0)">1.0</button>
+      <button class="preset-btn" onclick="setPreset(1.25)">1.25</button>
+      <button class="preset-btn" onclick="setPreset(1.5)">1.5</button>
+      <button class="preset-btn" onclick="setPreset(1.75)">1.75</button>
+      <button class="preset-btn" onclick="setPreset(2.0)">2.0</button>
+      <button class="preset-btn" onclick="setPreset(2.25)">2.25</button>
+      <button class="preset-btn" onclick="setPreset(2.5)">2.5</button>
+      <button class="preset-btn" onclick="setPreset(2.75)">2.75</button>
+      <button class="preset-btn" onclick="setPreset(3.0)">3.0</button>
     </div>
 
     <div class="memo-label">メモ（任意）</div>
@@ -709,8 +705,9 @@
 
     const months = ['1月','2月','3月','4月','5月','6月','7月','8月','9月','10月','11月','12月'];
     document.getElementById('modalDate').textContent = `${y}年 ${months[m]} ${d}日`;
-    document.getElementById('inputHours').value = entry ? entry.h : '';
-    document.getElementById('inputMins').value = entry ? (entry.m > 0 ? String(entry.m).padStart(2,'0') : '') : '';
+    document.getElementById('inputDecimal').value = entry ? (entry.dec || '') : '';
+    document.getElementById('convertedTime').textContent = '';
+    if (entry && entry.dec) updateConverted();
     document.getElementById('inputMemo').value = entry ? (entry.memo || '') : '';
     document.getElementById('btnDelete').style.display = entry ? 'block' : 'none';
 
@@ -723,20 +720,35 @@
     selectedDateKey = null;
   }
 
-  function setPreset(h, m) {
-    document.getElementById('inputHours').value = h;
-    document.getElementById('inputMins').value = String(m).padStart(2,'0');
+  function setPreset(val) {
+    document.getElementById('inputDecimal').value = val;
+    updateConverted();
+  }
+
+  function decimalToHM(dec) {
+    const totalMins = Math.round(dec * 60);
+    return { h: Math.floor(totalMins / 60), m: totalMins % 60 };
+  }
+
+  function updateConverted() {
+    const val = parseFloat(document.getElementById('inputDecimal').value) || 0;
+    if (val <= 0) { document.getElementById('convertedTime').textContent = ''; return; }
+    const {h, m} = decimalToHM(val);
+    document.getElementById('convertedTime').textContent =
+      `= ${h > 0 ? h + '時間' : ''}${m > 0 ? m + '分' : ''}`;
   }
 
   document.getElementById('btnSave').addEventListener('click', () => {
-    const h = parseInt(document.getElementById('inputHours').value) || 0;
-    const m = parseInt(document.getElementById('inputMins').value) || 0;
+    const dec = parseFloat(document.getElementById('inputDecimal').value) || 0;
+    const {h, m} = decimalToHM(dec);
     const memo = document.getElementById('inputMemo').value.trim();
-    data[selectedDateKey] = { h, m, memo };
+    data[selectedDateKey] = { h, m, dec, memo };
     save();
     closeModal();
     render();
   });
+
+  document.getElementById('inputDecimal').addEventListener('input', updateConverted);
 
   document.getElementById('btnDelete').addEventListener('click', () => {
     delete data[selectedDateKey];
