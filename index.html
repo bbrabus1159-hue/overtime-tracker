@@ -188,8 +188,51 @@
     border-color: #5d9de840;
   }
 
+  .day-cell.has-holiday {
+    background: #2e1a1a;
+    border-color: #e85d7540;
+  }
+
   .day-cell.today.has-data {
     border-color: var(--accent);
+  }
+
+  /* 種別トグル */
+  .type-toggle {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .type-btn {
+    flex: 1;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-muted);
+    font-family: 'Noto Sans JP', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .type-btn.active-ot {
+    background: #1e2e3e;
+    border-color: var(--accent2);
+    color: var(--accent2);
+  }
+
+  .type-btn.active-hol {
+    background: #2e1a1a;
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .day-overtime.holiday {
+    color: var(--accent);
   }
 
   .day-num {
@@ -490,13 +533,14 @@
   </div>
   <div class="summary">
     <div class="summary-card">
-      <div class="summary-label">月間合計</div>
+      <div class="summary-label">残業 合計</div>
       <div class="summary-value" id="totalHours">0<span class="summary-unit">h</span> 0<span class="summary-unit">m</span></div>
       <div class="summary-days" id="totalDays">0日</div>
     </div>
     <div class="summary-card">
-      <div class="summary-label">平均 / 日</div>
-      <div class="summary-value" id="avgTime">—</div>
+      <div class="summary-label">法定休日出勤</div>
+      <div class="summary-value" id="totalHoliday" style="color:var(--accent)">0<span class="summary-unit">h</span> 0<span class="summary-unit">m</span></div>
+      <div class="summary-days" id="totalHolidayDays">0日</div>
     </div>
   </div>
 </div>
@@ -524,7 +568,12 @@
   <div class="modal">
     <div class="modal-handle"></div>
     <div class="modal-date" id="modalDate"></div>
-    <div class="modal-title">残業時間を入力</div>
+    <div class="modal-title">時間を入力</div>
+
+    <div class="type-toggle">
+      <button class="type-btn active-ot" id="typeOT" onclick="setType('ot')">残業</button>
+      <button class="type-btn" id="typeHOL" onclick="setType('hol')">法定休日出勤</button>
+    </div>
 
     <div class="input-row">
       <div class="input-group">
@@ -598,26 +647,27 @@
       `${currentYear}.${String(currentMonth+1).padStart(2,'0')}`;
 
     // Summary
-    let totalMins = 0, days = 0;
+    let totalMins = 0, days = 0, holMins = 0, holDays = 0;
     const prefix = `${currentYear}-${String(currentMonth+1).padStart(2,'0')}-`;
     for (const [k, v] of Object.entries(data)) {
       if (k.startsWith(prefix)) {
-        totalMins += (v.h||0)*60 + (v.m||0);
-        if (v.h > 0 || v.m > 0) days++;
+        if (v.type === 'hol') {
+          holMins += (v.h||0)*60 + (v.m||0);
+          if (v.h > 0 || v.m > 0) holDays++;
+        } else {
+          totalMins += (v.h||0)*60 + (v.m||0);
+          if (v.h > 0 || v.m > 0) days++;
+        }
       }
     }
     const th = Math.floor(totalMins/60), tm = totalMins%60;
     document.getElementById('totalHours').innerHTML =
       `${th}<span class="summary-unit">h</span> ${tm}<span class="summary-unit">m</span>`;
     document.getElementById('totalDays').textContent = `${days}日`;
-    if (days > 0) {
-      const avg = Math.round(totalMins/days);
-      const ah = Math.floor(avg/60), am = avg%60;
-      document.getElementById('avgTime').innerHTML =
-        `${ah}<span class="summary-unit">h</span>${String(am).padStart(2,'0')}<span class="summary-unit">m</span>`;
-    } else {
-      document.getElementById('avgTime').textContent = '—';
-    }
+    const hh = Math.floor(holMins/60), hm = holMins%60;
+    document.getElementById('totalHoliday').innerHTML =
+      `${hh}<span class="summary-unit">h</span> ${hm}<span class="summary-unit">m</span>`;
+    document.getElementById('totalHolidayDays').textContent = `${holDays}日`;
 
     // Calendar
     const grid = document.getElementById('calendarGrid');
@@ -643,7 +693,13 @@
       if (dow === 0) cell.classList.add('sun');
       if (dow === 6) cell.classList.add('sat');
       if (isToday) cell.classList.add('today');
-      if (entry && (entry.h > 0 || entry.m > 0)) cell.classList.add('has-data');
+      if (entry && (entry.h > 0 || entry.m > 0)) {
+        if (entry.type === 'hol') {
+          cell.classList.add('has-holiday');
+        } else {
+          cell.classList.add('has-data');
+        }
+      }
 
       const numEl = document.createElement('div');
       numEl.className = 'day-num';
@@ -652,7 +708,7 @@
 
       if (entry && (entry.h > 0 || entry.m > 0)) {
         const ot = document.createElement('div');
-        ot.className = 'day-overtime';
+        ot.className = 'day-overtime' + (entry.type === 'hol' ? ' holiday' : '');
         ot.textContent = formatTime(entry.h, entry.m);
         cell.appendChild(ot);
       }
@@ -688,7 +744,8 @@
       const d = e.key.slice(5); // MM-DD
       item.innerHTML = `
         <div class="history-date">${d}</div>
-        <div class="history-time">${formatTime(e.h, e.m)}</div>
+        <div class="history-time" style="color:${e.type === 'hol' ? 'var(--accent)' : 'var(--accent2)'}">${formatTime(e.h, e.m)}</div>
+        <div style="font-size:10px;color:${e.type === 'hol' ? 'var(--accent)' : 'var(--text-muted)'};">${e.type === 'hol' ? '法定休日' : '残業'}</div>
         ${e.memo ? `<div class="history-memo">${e.memo}</div>` : ''}
       `;
       item.addEventListener('click', () => {
@@ -710,9 +767,10 @@
     if (entry && entry.dec) updateConverted();
     document.getElementById('inputMemo').value = entry ? (entry.memo || '') : '';
     document.getElementById('btnDelete').style.display = entry ? 'block' : 'none';
+    setType(entry ? (entry.type || 'ot') : 'ot');
 
     document.getElementById('modalOverlay').classList.add('open');
-    setTimeout(() => document.getElementById('inputHours').focus(), 300);
+    setTimeout(() => document.getElementById('inputDecimal').focus(), 300);
   }
 
   function closeModal() {
@@ -720,6 +778,13 @@
     selectedDateKey = null;
   }
 
+  let currentType = 'ot'; // 'ot' or 'hol'
+
+  function setType(t) {
+    currentType = t;
+    document.getElementById('typeOT').className = 'type-btn' + (t === 'ot' ? ' active-ot' : '');
+    document.getElementById('typeHOL').className = 'type-btn' + (t === 'hol' ? ' active-hol' : '');
+  }
   function setPreset(val) {
     document.getElementById('inputDecimal').value = val;
     updateConverted();
@@ -742,7 +807,7 @@
     const dec = parseFloat(document.getElementById('inputDecimal').value) || 0;
     const {h, m} = decimalToHM(dec);
     const memo = document.getElementById('inputMemo').value.trim();
-    data[selectedDateKey] = { h, m, dec, memo };
+    data[selectedDateKey] = { h, m, dec, memo, type: currentType };
     save();
     closeModal();
     render();
